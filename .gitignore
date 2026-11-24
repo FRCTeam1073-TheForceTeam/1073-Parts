@@ -1,0 +1,14 @@
+node_modules/
+
+# The team's live data: database (accounts, password hashes), photos, part files. Never commit.
+data/
+data-*/
+
+# Backups (same contents as data/)
+*.tar
+
+# Local secrets and OS clutter
+.env
+.env.*
+.DS_Store
+Thumbs.db

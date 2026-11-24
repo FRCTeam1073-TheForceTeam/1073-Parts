@@ -1,0 +1,21 @@
+{
+  "name": "parts-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FRC 1073 parts ordering and inventory tracker",
+  "type": "module",
+  "main": "server/start.js",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/start.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js",
+    "backup": "node --disable-warning=ExperimentalWarning server/backup.js create backup.tar"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "occt-import-js": "^0.0.23",
+    "three": "^0.160.1"
+  }
+}

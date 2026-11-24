@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>1073 Parts</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232563eb'/><text x='16' y='22' font-size='14' font-family='Arial' font-weight='700' text-anchor='middle' fill='white'>1073</text></svg>">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
+  </script>
+  <script>
+    // Apply the saved theme before the page draws, so it doesn't flash the wrong colors.
+    try {
+      const t = JSON.parse(localStorage.getItem('pt.theme') || '"auto"');
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    } catch {}
+  </script>
+</head>
+<body>
+  <header class="topbar signed-out">
+    <div class="brand"><span class="logo">1073</span> Parts</div>
+    <nav class="tabs" id="tabs">
+      <button data-view="board">Board</button>
+      <button data-view="orders">Orders</button>
+      <button data-view="inventory">Inventory</button>
+      <button data-view="carts">Carts</button>
+      <button data-view="budget">Budget</button>
+      <button data-view="settings">Settings</button>
+    </nav>
+    <div class="user-box" id="user-box"></div>
+      </header>
+  <main id="view"></main>
+  <div id="modal-root"></div>
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
