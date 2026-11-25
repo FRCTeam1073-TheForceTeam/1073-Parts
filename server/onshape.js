@@ -1,21 +1,20 @@
 // Onshape: read an assembly's bill of materials (or a Part Studio's parts) from a document link.
 // Uses the team's API keys (Settings → Onshape), sent with HTTP Basic auth as Onshape allows.
-import { db } from './db.js';
+import * as data from './data.js';
 
 const BASE = 'https://cad.onshape.com';
 const KEY_ACCESS = 'onshape_access_key';
 const KEY_SECRET = 'onshape_secret_key';
 
-const readSecret = (k) => db.prepare('SELECT value FROM settings WHERE key = ?').get(k)?.value || '';
+const readSecret = (k) => data.getSetting(k) || '';
 
 export function isConfigured() {
   return !!(readSecret(KEY_ACCESS) && readSecret(KEY_SECRET));
 }
 
 export function saveKeys(access, secret) {
-  const up = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
-  up.run(KEY_ACCESS, String(access || '').trim());
-  up.run(KEY_SECRET, String(secret || '').trim());
+  data.setSetting(KEY_ACCESS, String(access || '').trim());
+  data.setSetting(KEY_SECRET, String(secret || '').trim());
 }
 
 // https://cad.onshape.com/documents/<did>/<w|v|m>/<wvmid>/e/<eid>

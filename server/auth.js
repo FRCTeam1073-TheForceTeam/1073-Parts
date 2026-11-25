@@ -1,6 +1,6 @@
 // Team accounts: password hashing, sessions, and role checks.
 import crypto from 'node:crypto';
-import { db } from './db.js';
+import * as data from './data.js';
 
 export const ROLES = ['student', 'mentor', 'admin'];
 const SESSION_DAYS = 180;
@@ -28,7 +28,7 @@ export function validatePassword(password) {
 const sha = (v) => crypto.createHash('sha256').update(v).digest('hex');
 
 export function userCount() {
-  return db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+  return data.countUsers();
 }
 
 export function publicUser(u) {
@@ -37,20 +37,19 @@ export function publicUser(u) {
 
 export function startSession(res, userId, secure) {
   const token = crypto.randomBytes(32).toString('base64url');
-  db.prepare(`INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, datetime('now', '+${SESSION_DAYS} days'))`)
-    .run(sha(token), userId);
+  data.createSession(sha(token), userId, SESSION_DAYS);
   res.setHeader('Set-Cookie',
     `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DAYS * 86400}${secure ? '; Secure' : ''}`);
 }
 
 export function endSession(req, res) {
   const token = readToken(req);
-  if (token) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(sha(token));
+  if (token) data.deleteSession(sha(token));
   res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
 }
 
 export function endAllSessions(userId) {
-  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+  data.deleteUserSessions(userId);
 }
 
 function readToken(req) {
@@ -66,9 +65,7 @@ function readToken(req) {
 export function loadUser(req, res, next) {
   const token = readToken(req);
   if (token) {
-    const u = db.prepare(`
-      SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = ? AND s.expires_at > datetime('now') AND u.disabled = 0`).get(sha(token));
+    const u = data.findUserBySession(sha(token));
     if (u) req.user = u;
   }
   next();
