@@ -15,11 +15,18 @@
     "test": "npm run test:unit && npm run test:db",
     "test:unit": "node --import ./test/unit/helpers/forbid-db.js --disable-warning=ExperimentalWarning --test \"test/unit/**/*.test.js\"",
     "test:db": "node --disable-warning=ExperimentalWarning --test \"test/db/**/*.test.js\"",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:first-run": "playwright test -c playwright.first-run.config.js",
     "test:coverage": "node --import ./test/unit/helpers/forbid-db.js --disable-warning=ExperimentalWarning --test --experimental-test-coverage \"test/unit/**/*.test.js\""
   },
   "dependencies": {
     "express": "^4.21.2",
     "occt-import-js": "^0.0.23",
     "three": "^0.160.1"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.1",
+    "@playwright/test": "^1.60.0"
   }
 }

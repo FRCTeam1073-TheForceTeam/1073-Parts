@@ -10,6 +10,7 @@ Team parts ordering, inventory, and build-board app. Node 22.13+, ES modules (`"
 | `npm run test:db` | Database integration tests in `test/db/`. Each file gets a throwaway database in a temp `DATA_DIR`. |
 | `npm test` | Both suites. |
 | `npm run test:coverage` | Unit suite with coverage. |
+| `npm run test:e2e` | Playwright end-to-end tests in `e2e/`. Starts its own server and database. See `e2e/AGENTS.md`. |
 
 Run the relevant suite before reporting work as done. Report failures with their output; don't describe a suite as passing unless it did.
 
@@ -81,6 +82,7 @@ server/
 public/js/          browser modules (core.js holds shared helpers and state)
 test/unit/          unit tests and test/unit/helpers/ (fakes, harness, DB-blocking loader)
 test/db/            database tests and test/db/helpers/
+e2e/                Playwright end-to-end tests (own guide: e2e/AGENTS.md)
 ```
 
 ## Before you finish
