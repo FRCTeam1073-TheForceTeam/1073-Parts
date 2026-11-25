@@ -59,7 +59,7 @@ const cache = new Map();
 const CACHE_MS = 10 * 60 * 1000;
 const UA = 'Mozilla/5.0 (compatible; FRC1073-PartsTracker/0.2)';
 
-async function fetchText(url, { retries = 2, cacheMs = CACHE_MS } = {}) {
+export async function fetchText(url, { retries = 2, cacheMs = CACHE_MS } = {}) {
   const hit = cache.get(url);
   if (hit && Date.now() - hit.at < cacheMs) return hit.body;
 
@@ -86,7 +86,7 @@ async function fetchJson(url, opts) {
 }
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
-function decode(str = '') {
+export function decode(str = '') {
   return str
     .replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e) => {
       if (e[0] === '#') {
@@ -98,24 +98,24 @@ function decode(str = '') {
     .trim();
 }
 
-function stripTags(html = '') {
+export function stripTags(html = '') {
   return decode(html.replace(/<br\s*\/?>/gi, ', ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '));
 }
 
-function toCents(value) {
+export function toCents(value) {
   if (value == null || value === '') return null;
   const n = Number(String(value).replace(/[^0-9.]/g, ''));
   return Number.isFinite(n) && String(value).match(/\d/) ? Math.round(n * 100) : null;
 }
 
-function absUrl(domain, u) {
+export function absUrl(domain, u) {
   if (!u) return null;
   if (u.startsWith('//')) return 'https:' + u;
   if (u.startsWith('/')) return `https://${domain}${u}`;
   return u;
 }
 
-const sameSku = (a, b) => !!a && !!b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+export const sameSku = (a, b) => !!a && !!b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
 
 // The part name that goes on an order: product title plus the chosen variant.
 export function variantName(productTitle, variantTitle) {
@@ -310,7 +310,7 @@ async function bigcommerceProduct(s, url) {
 }
 
 // Read the product's option groups (radio buttons or dropdowns) and expand them into combinations.
-function bigcommerceOptionCombos(html, max = 30) {
+export function bigcommerceOptionCombos(html, max = 30) {
   const groups = [];
   const fields = html.split(/<div class="form-field" data-product-attribute="/).slice(1);
   for (const field of fields) {
@@ -367,7 +367,7 @@ async function bigcommerceOptionInfo(s, productId, combo) {
 // Swyft (custom storefront with product JSON embedded in the page)
 
 // Pull every embedded {"id","slug","sku",...} product object out of a page.
-function swyftExtract(html) {
+export function swyftExtract(html) {
   // The data lives in JS string literals: self.__next_f.push([1,"..."]). Decode them properly.
   const chunks = [];
   for (const m of html.matchAll(/self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)/g)) {
@@ -411,7 +411,7 @@ function swyftExtract(html) {
   return { products: [...products.values()], paths };
 }
 
-function swyftToProduct(s, p, paths) {
+export function swyftToProduct(s, p, paths) {
   const variants = (Array.isArray(p.variants) && p.variants.length ? p.variants : [{ label: null, priceCents: p.priceCents, sku: p.sku, shopifyVariantId: p.shopifyVariantId, availableForSale: p.availableForSale }])
     .map((v) => ({
       id: v.shopifyVariantId ? String(v.shopifyVariantId).split('/').pop() : null,
@@ -533,7 +533,7 @@ export async function product(supplierKey, handle) {
 
 // Many stores (WCP especially) sell each size as its own product: "40t Spur Gear…", "60t Spur Gear…".
 // Siblings are products whose names differ from this one only in tokens containing numbers.
-const titleTokens = (t) => String(t).replace(/[(),]/g, ' ').split(/\s+/).filter(Boolean);
+export const titleTokens = (t) => String(t).replace(/[(),]/g, ' ').split(/\s+/).filter(Boolean);
 
 // Shopify's "related products" (what the store shows under a product) usually lists the other sizes.
 async function shopifyRelated(s, productId) {
@@ -582,15 +582,16 @@ export async function siblings(supplierKey, handle, title, productId) {
   }));
   out.push({ handle, title, label: labelAt(mine, varying), priceCents: null, sku: null, current: true });
 
-  // Sort sizes by value: 1/4" < 1" < 1-1/2" < 2"; 20t < 40t.
-  const size = (label) => {
-    const m = String(label).match(/(\d+)(?:-(\d+)\/(\d+)|\/(\d+)|\.(\d+))?/);
-    if (!m) return 0;
-    if (m[2]) return Number(m[1]) + Number(m[2]) / Number(m[3]);
-    if (m[4]) return Number(m[1]) / Number(m[4]);
-    return parseFloat(m[0]);
-  };
-  return out.sort((a, b) => size(a.label) - size(b.label) || a.label.localeCompare(b.label));
+  return out.sort((a, b) => sizeValue(a.label) - sizeValue(b.label) || a.label.localeCompare(b.label));
+}
+
+// Numeric value of a size label so variants sort by size: 1/4" < 1" < 1-1/2" < 2"; 20t < 40t.
+export function sizeValue(label) {
+  const m = String(label).match(/(\d+)(?:-(\d+)\/(\d+)|\/(\d+)|\.(\d+))?/);
+  if (!m) return 0;
+  if (m[2]) return Number(m[1]) + Number(m[2]) / Number(m[3]);
+  if (m[4]) return Number(m[1]) / Number(m[4]);
+  return parseFloat(m[0]);
 }
 
 // Look up a pasted product URL. Honors Shopify's ?variant=<id> so the chosen variant is preselected.
@@ -723,4 +724,9 @@ export function buildCart(supplierKey, items) {
     cartUrl: `https://${s.domain}/cart.php`,
     skipped,
   };
+}
+
+// Forget cached supplier responses (used by tests so one case doesn't see another's fake responses).
+export function clearCache() {
+  cache.clear();
 }

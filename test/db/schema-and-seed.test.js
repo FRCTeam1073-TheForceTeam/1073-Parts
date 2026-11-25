@@ -13,7 +13,7 @@ let t;
 before(async () => { t = await openTestDb(); });
 after(() => t.close());
 
-const DB_MODULE = new URL('../server/db.js', import.meta.url).href;
+const DB_MODULE = new URL('../../server/db.js', import.meta.url).href;
 
 // Opens db.js in a separate Node process against a given data directory.
 function openDbInChild(dir) {

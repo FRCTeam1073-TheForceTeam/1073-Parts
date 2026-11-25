@@ -6,7 +6,7 @@ import {
 import { openPlacedOrderModal } from './orders.js';
 
 // Can this order be put in the supplier's cart automatically?
-function cartable(s, o) {
+export function cartable(s, o) {
   return { shopify: !!o.variant_id, bigcommerce: !!o.product_id, swyft: !!o.url, mcmaster: !!o.sku }[s.platform] ?? false;
 }
 

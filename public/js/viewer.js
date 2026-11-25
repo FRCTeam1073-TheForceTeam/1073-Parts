@@ -3,7 +3,7 @@
 import { h, fill, api, attempt, openModal, closeModal, refresh, uploadImage } from './core.js';
 
 const MODEL_EXTS = ['step', 'stp', 'stl', '3mf', 'obj'];
-const extOf = (name) => String(name || '').split('.').pop().toLowerCase();
+export const extOf = (name) => String(name || '').split('.').pop().toLowerCase();
 export const isViewable = (name) => MODEL_EXTS.includes(extOf(name));
 
 let threePromise;

@@ -11,8 +11,8 @@ const TABLES = ['part_files', 'custom_parts', 'orders', 'inventory', 'sessions',
 export async function openTestDb() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'parts-test-'));
   process.env.DATA_DIR = dir;
-  const { db, SETTING_DEFAULTS } = await import('../../server/db.js');
-  const data = await import('../../server/data.js');
+  const { db, SETTING_DEFAULTS } = await import('../../../server/db.js');
+  const data = await import('../../../server/data.js');
   return {
     db,
     data,

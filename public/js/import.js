@@ -46,7 +46,7 @@ const COLUMN_GUESS = {
   material: /^material$/i,
 };
 
-function guessColumns(header) {
+export function guessColumns(header) {
   const out = {};
   for (const [key, re] of Object.entries(COLUMN_GUESS)) {
     const idx = header.findIndex((c) => re.test(c.trim()));
@@ -56,7 +56,7 @@ function guessColumns(header) {
 }
 
 // Combine duplicate rows (same part number, or same name when there's none) and sum quantities.
-function toBomRows(rows, cols) {
+export function toBomRows(rows, cols) {
   const merged = new Map();
   for (const r of rows) {
     const partNumber = (r[cols.partNumber] || '').trim();

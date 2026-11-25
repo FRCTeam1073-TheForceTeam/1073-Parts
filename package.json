@@ -12,7 +12,10 @@
     "start": "node --disable-warning=ExperimentalWarning server/start.js",
     "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js",
     "backup": "node --disable-warning=ExperimentalWarning server/backup.js create backup.tar",
-    "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\""
+    "test": "npm run test:unit && npm run test:db",
+    "test:unit": "node --import ./test/unit/helpers/forbid-db.js --disable-warning=ExperimentalWarning --test \"test/unit/**/*.test.js\"",
+    "test:db": "node --disable-warning=ExperimentalWarning --test \"test/db/**/*.test.js\"",
+    "test:coverage": "node --import ./test/unit/helpers/forbid-db.js --disable-warning=ExperimentalWarning --test --experimental-test-coverage \"test/unit/**/*.test.js\""
   },
   "dependencies": {
     "express": "^4.21.2",

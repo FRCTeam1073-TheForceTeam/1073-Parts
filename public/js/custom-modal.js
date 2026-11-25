@@ -7,7 +7,7 @@ import { openViewer, isViewable, renderThumbnail } from './viewer.js';
 
 const canDeleteCustom = (p) => isMentor() || p.created_by === state.user.id;
 const FILE_ACCEPT = '.step,.stp,.stl,.3mf,.obj,.dxf,.dwg,.gcode,.bgcode,.f3d,.sldprt,.pdf';
-const fileSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+export const fileSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
 // Files section: attach STEP/STL/3MF/etc. Uploads happen right away; new ones are linked to the part on save.
 function filesSection(existing, onUploaded) {

@@ -5,7 +5,7 @@ import {
 } from './core.js';
 
 // Spent = ordered or arrived. Committed = approved but not ordered yet. Pending = awaiting approval.
-function bucket(list) {
+export function bucket(list) {
   const out = { spent: 0, committed: 0, pending: 0 };
   for (const o of list) {
     if (o.approval === 'rejected') continue;
