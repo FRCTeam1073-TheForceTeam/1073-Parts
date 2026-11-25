@@ -60,6 +60,18 @@ Then open http://localhost:3000. Data is stored in `data/parts.db` (SQLite). Bac
 | `PORT` | `3000` | Port to listen on |
 | `DATA_DIR` | `./data` | Where the SQLite database lives |
 | `TRUST_PROXY` | *(unset)* | Set to `1` when running behind a reverse proxy that terminates HTTPS |
+| `SETUP_CODE` | *(unset)* | If set, the first admin account can only be created by entering this code |
+
+## Tests
+
+```bash
+npm run test:unit   # fast, no database: pure logic, HTTP routes against an in-memory store, browser helpers
+npm run test:db     # integration tests against a throwaway SQLite database
+npm test            # both
+npm run test:coverage
+```
+
+Unit tests live in `test/unit/` and never open `data/`. Database tests live in `test/db/` and use a temporary `DATA_DIR` for each file.
 
 ## Adding a supplier
 

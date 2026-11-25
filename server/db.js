@@ -188,18 +188,7 @@ export const SETTING_DEFAULTS = {
   processes: ['CNC router', 'Mill', 'Lathe', '3D print', 'Laser cut', 'Waterjet', 'Bandsaw / manual', 'Sheet metal bend', 'Outsourced'].join('\n'),
 };
 
-export function getSettings() {
-  const rows = db.prepare('SELECT key, value FROM settings').all();
-  const out = { ...SETTING_DEFAULTS };
-  for (const r of rows) if (r.key in SETTING_DEFAULTS) out[r.key] = r.value;
-  return out;
-}
-
-export function saveSettings(values) {
-  const up = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
-  for (const [k, v] of Object.entries(values)) if (k in SETTING_DEFAULTS) up.run(k, v == null ? '' : String(v));
-  return getSettings();
-}
+// Settings are read and written through data.js (getSettings / saveSettings).
 
 // Photo for custom parts (uploaded, same as part photos on orders).
 addColumn('custom_parts', 'image', 'TEXT');

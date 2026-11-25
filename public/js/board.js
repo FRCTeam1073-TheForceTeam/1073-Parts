@@ -9,8 +9,8 @@ import { openViewer, isViewable } from './viewer.js';
 import { openItemModal } from './item-modal.js';
 import { openPlacedOrderModal, openReceiveModal } from './orders.js';
 
-const today = () => new Date().toISOString().slice(0, 10);
-const isOverdue = (p, lastColumnId) => p.due_date && p.due_date < today() && p.column_id !== lastColumnId;
+export const today = () => new Date().toISOString().slice(0, 10);
+export const isOverdue = (p, lastColumnId) => p.due_date && p.due_date < today() && p.column_id !== lastColumnId;
 
 function setUi(key, value, persist = false) {
   state.ui[key] = value;
@@ -224,7 +224,7 @@ const COTS_COLUMNS = [
   { id: 'arrived', name: 'Arrived (last 2 weeks)', color: 'var(--arrived)' },
 ];
 
-function cotsColumnOf(o) {
+export function cotsColumnOf(o) {
   if (o.approval === 'pending') return 'pending';
   return o.status;
 }
