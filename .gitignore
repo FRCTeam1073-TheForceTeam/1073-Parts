@@ -10,6 +10,7 @@ data-*/
 # End-to-end test output and saved test logins
 e2e/.auth/
 e2e/test-results/
+e2e/test-results-first-run/
 e2e/playwright-report/
 
 # Local secrets and OS clutter

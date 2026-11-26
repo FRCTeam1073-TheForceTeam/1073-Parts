@@ -22,9 +22,6 @@ changes="$(rsync -ai --delete --chown=root:root \
   --exclude='deploy/' \
   --exclude='*.tar' \
   --exclude='playwright*.config.js' \
-  --exclude='Dockerfile' \
-  --exclude='.dockerignore' \
-  --exclude='fly.toml' \
   --exclude='.env' \
   --exclude='.env.*' \
   "$SRC_DIR"/ "$APP_DIR"/)"
