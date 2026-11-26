@@ -21,13 +21,20 @@ const topbar = document.querySelector('.topbar');
 const tabs = document.getElementById('tabs');
 const userBox = document.getElementById('user-box');
 
+// The top-left name text node sits after the "1073" logo span.
+function setBrandName(name) {
+  topbar.querySelector('.brand').lastChild.textContent = ` ${name}`;
+}
+
 function showSignedOut() {
   closeModal();
   topbar.classList.add('signed-out');
+  document.body.classList.remove('login-screen', 'fading');
+  setBrandName('Parts');
   userBox.replaceChildren();
 }
 
-function authScreen(title, subtitle, fields, submitLabel, onSubmit) {
+function authScreen(title, subtitle, fields, submitLabel, onSubmit, { brandName = 'Parts', onSuccess } = {}) {
   showSignedOut();
   const error = h('div', { class: 'auth-error', role: 'alert' });
   const button = h('button', { class: 'btn primary', type: 'submit' }, submitLabel);
@@ -37,13 +44,14 @@ function authScreen(title, subtitle, fields, submitLabel, onSubmit) {
     button.disabled = true;
     try {
       await onSubmit();
+      if (onSuccess) await onSuccess();
       boot();
     } catch (err) {
       error.textContent = err.message;
       button.disabled = false;
     }
   } },
-  h('div', { class: 'brand big' }, h('span', { class: 'logo' }, '1073'), ' Parts'),
+  h('div', { class: 'brand big' }, h('span', { class: 'logo' }, '1073'), ` ${brandName}`),
   h('h2', {}, title),
   subtitle ? h('p', { class: 'note' }, subtitle) : null,
   fields, error, button);
@@ -51,12 +59,22 @@ function authScreen(title, subtitle, fields, submitLabel, onSubmit) {
   form.querySelector('input')?.focus();
 }
 
+// After a successful sign-in: swap the card for the message, fade the message and the moon out, then continue.
+function celebrateLogin() {
+  document.querySelector('#view .auth-wrap').replaceChildren(h('div', { class: 'no-moon', role: 'status' }, "That's no moon!"));
+  document.body.classList.add('fading');
+  return new Promise((resolve) => setTimeout(resolve, 3000));
+}
+
 function showLogin() {
   const username = h('input', { type: 'text', autocomplete: 'username', required: true });
   const password = h('input', { type: 'password', autocomplete: 'current-password', required: true });
   authScreen('Sign in', 'Ask a mentor or admin if you need an account.',
     [field('Username', username), field('Password', password)], 'Sign in',
-    () => api('POST', '/api/login', { username: username.value.trim(), password: password.value }));
+    () => api('POST', '/api/login', { username: username.value.trim(), password: password.value }),
+    { brandName: 'The Moon', onSuccess: celebrateLogin });
+  document.body.classList.add('login-screen');
+  setBrandName('The Moon');
 }
 
 function showSetup(needsCode) {
@@ -77,6 +95,13 @@ function showSetup(needsCode) {
 
 function showUser() {
   topbar.classList.remove('signed-out');
+  if (document.body.classList.contains('login-screen')) {
+    // Coming straight from the sign-in screen: fade the app in, then clear the class.
+    document.body.classList.add('app-fade-in');
+    document.body.addEventListener('animationend', () => document.body.classList.remove('app-fade-in'), { once: true });
+  }
+  document.body.classList.remove('login-screen', 'fading');
+  setBrandName('Parts');
   userBox.replaceChildren(
     h('span', { class: 'user-name' }, state.user.display_name, h('span', { class: 'role-tag' }, ROLE_LABEL[state.user.role])),
     h('button', { class: 'btn small', onclick: async () => {
