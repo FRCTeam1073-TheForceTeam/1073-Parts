@@ -1,0 +1,27 @@
+# systemd unit for production. Rendered and installed by deploy/install.sh (do not run this file directly).
+# The installer fills in the node path and the app folder (sed-replaced markers, so don't name them here).
+# Secrets and settings (SETUP_CODE, PORT, DATA_DIR) live in /etc/1073-parts/parts.env, not here.
+
+[Unit]
+Description=1073 Parts (team parts ordering and inventory)
+After=network.target
+
+[Service]
+Type=simple
+User=parts
+Group=parts
+WorkingDirectory=@APP_DIR@
+EnvironmentFile=/etc/1073-parts/parts.env
+ExecStart=@NODE@ --disable-warning=ExperimentalWarning server/start.js
+Restart=on-failure
+RestartSec=3
+
+# Hardening: the app only needs to read its code and write to DATA_DIR.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/1073-parts
+
+[Install]
+WantedBy=multi-user.target
