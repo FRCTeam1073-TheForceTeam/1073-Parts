@@ -265,6 +265,30 @@ select.status.arrived { color: var(--arrived); border-color: color-mix(in srgb, 
 .auth-error { color: var(--danger); font-size: 13px; min-height: 1px; }
 .brand.big { font-size: 20px; }
 
+/* Sign-in screen only: full-screen moon photo behind the card (class set in js/main.js). */
+body.login-screen { min-height: 100vh; }
+body.login-screen::before {
+  content: ""; position: fixed; inset: 0; z-index: -1;
+  background: url("img/moon.jpg") center / cover no-repeat;
+  transition: opacity 3s ease;
+}
+body.login-screen.fading::before { opacity: 0; }
+body.login-screen .topbar { background: transparent; border-bottom-color: transparent; }
+body.login-screen .topbar .brand { transition: opacity 3s ease; }
+body.login-screen.fading .topbar .brand { opacity: 0; }
+body.login-screen .auth-wrap { min-height: calc(100vh - 60px); box-sizing: border-box; align-items: center; padding: 0 16px; }
+
+/* Shown in place of the sign-in card after a successful login. It stays put while the moon fades. */
+.no-moon {
+  width: min(460px, 100%); box-sizing: border-box; padding: 34px 26px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow);
+  font-size: clamp(32px, 8vw, 52px); font-weight: 800; text-align: center; color: var(--text);
+}
+
+/* The whole app fades in after the sign-in screen (class set in js/main.js showUser). */
+body.app-fade-in { animation: app-fade-in 2s ease; }
+@keyframes app-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
 /* ---------- approvals, shipping ---------- */
 .pill.approval-pending { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); }
 .pill.approval-rejected { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: color-mix(in srgb, var(--danger) 8%, transparent); }
