@@ -127,7 +127,7 @@ export async function openViewer(file, part = null) {
     others.length > 1 ? h('div', { class: 'row viewer-files' }, others.map((f) =>
       h('button', { class: `btn small${f.id === file.id ? ' primary' : ''}`, onclick: () => openViewer(f, part) }, f.name))) : null,
     holder,
-    h('p', { class: 'note' }, 'Drag to rotate · scroll to zoom · right-drag to pan')), [
+    h('p', { class: 'note' }, 'Middle-drag to rotate · left-drag to pan · scroll to zoom')), [
     h('a', { class: 'btn', href: `/api/files/${file.id}`, download: file.name, style: { marginRight: 'auto' } }, 'Download'),
     photoBtn,
     h('button', { class: 'btn primary', onclick: closeModal }, 'Close'),
@@ -136,12 +136,18 @@ export async function openViewer(file, part = null) {
   try {
     const model = await buildModel(await fetchFile(file), file.name);
     const width = holder.clientWidth || 900;
-    const height = Math.round(Math.min(window.innerHeight * 0.6, width * 0.62));
+    // The page is scaled up on big screens (CSS zoom), so the window height is divided by that scale to stay on screen.
+    const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    const height = Math.round(Math.min((window.innerHeight / zoom) * 0.6, width * 0.62));
     const s = await stage(model, width, height, { preserveDrawingBuffer: true });
     renderer = s.renderer;
     const { OrbitControls } = await loadThree();
     const controls = new OrbitControls(s.camera, renderer.domElement);
     controls.enableDamping = true;
+    // CAD-style buttons: middle-drag rotates, left-drag pans, right does nothing. The wheel still zooms.
+    controls.mouseButtons = { LEFT: s.THREE.MOUSE.PAN, MIDDLE: s.THREE.MOUSE.ROTATE, RIGHT: null };
+    // Stop the browser's middle-click autoscroll from starting while you rotate.
+    renderer.domElement.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });
     fill(holder, renderer.domElement);
     const loop = () => {
       if (!renderer.domElement.isConnected) { // dialog closed: free the GPU memory

@@ -122,6 +122,7 @@ export const state = {
     boardMech: '',
     boardPerson: '',
     boardProcess: '',
+    boardSort: prefs.get('boardSort', 'board'), // board | tasks | due (order of cards within a column)
     boardQuery: '',
   },
 };
@@ -487,4 +488,11 @@ export function setTheme(t) {
   prefs.set('theme', t);
   if (t === 'auto') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = t;
+}
+
+// How big everything is drawn: auto (scales with the screen) / small / normal / large. Same idea as the theme.
+export function setSize(s) {
+  prefs.set('size', s);
+  if (s === 'auto') delete document.documentElement.dataset.size;
+  else document.documentElement.dataset.size = s;
 }

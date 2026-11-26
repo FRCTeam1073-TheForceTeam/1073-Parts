@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseCsv, guessColumns, toBomRows } from '../../public/js/import.js';
 import { bucket } from '../../public/js/budget.js';
-import { isOverdue, today, cotsColumnOf } from '../../public/js/board.js';
+import { isOverdue, today, cotsColumnOf, taskCounts, sortCards, stageOf, stageTasks, stageProgress } from '../../public/js/board.js';
 import { cartable } from '../../public/js/carts.js';
 import { fileSize } from '../../public/js/custom-modal.js';
 import { extOf, isViewable } from '../../public/js/viewer.js';
@@ -133,6 +133,97 @@ describe('COTS board columns', () => {
   it('puts a pending request in the pending column, and anything else in its status column', () => {
     assert.equal(cotsColumnOf({ approval: 'pending', status: 'needed' }), 'pending');
     assert.equal(cotsColumnOf({ approval: 'approved', status: 'ordered' }), 'ordered');
+  });
+});
+
+describe('board task counts', () => {
+  it('counts done and remaining tasks on a part', () => {
+    assert.deepEqual(taskCounts({ tasks: [{ done: 1 }, { done: 0 }, { done: 0 }] }), { total: 3, done: 1, left: 2 });
+  });
+
+  it('treats a part without a checklist as having no tasks', () => {
+    assert.deepEqual(taskCounts({}), { total: 0, done: 0, left: 0 });
+  });
+
+  it('counts a plain list of tasks too', () => {
+    assert.deepEqual(taskCounts([{ done: 1 }, { done: 1 }]), { total: 2, done: 2, left: 0 });
+  });
+});
+
+describe('board stages', () => {
+  const columns = [{ id: 10, name: 'Design' }, { id: 11, name: 'Ready' }, { id: 12, name: 'Manufacturing' }, { id: 13, name: 'Done' }];
+
+  it('treats a part or task with no stage as being in the first column', () => {
+    assert.equal(stageOf({ column_id: null }, columns), 10);
+    assert.equal(stageOf({ column_id: 12 }, columns), 12);
+  });
+
+  it('says which step of the board a part is on', () => {
+    assert.deepEqual(stageProgress({ column_id: 11 }, columns), { step: 2, total: 4, name: 'Ready' });
+    assert.deepEqual(stageProgress({}, columns), { step: 1, total: 4, name: 'Design' });
+  });
+
+  it('puts a part whose stage was deleted on the first step', () => {
+    assert.deepEqual(stageProgress({ column_id: 99 }, columns), { step: 1, total: 4, name: 'Design' });
+  });
+
+  it('shows no steps when the board has no columns', () => {
+    assert.deepEqual(stageProgress({}, []), { step: 0, total: 0, name: '' });
+  });
+
+  it('picks only the tasks for the stage the part is in now', () => {
+    const part = { column_id: 11, tasks: [{ id: 1, column_id: 10 }, { id: 2, column_id: 11 }, { id: 3, column_id: 11 }, { id: 4, column_id: null }] };
+    assert.deepEqual(stageTasks(part, columns).map((t) => t.id), [2, 3]);
+  });
+
+  it('can pick the tasks for another stage, counting stageless tasks as the first', () => {
+    const part = { column_id: 11, tasks: [{ id: 1, column_id: 10 }, { id: 4, column_id: null }] };
+    assert.deepEqual(stageTasks(part, columns, 10).map((t) => t.id), [1, 4]);
+  });
+});
+
+describe('board card sorting', () => {
+  const tasks = (done, left) => [...Array(done)].map(() => ({ done: 1 })).concat([...Array(left)].map(() => ({ done: 0 })));
+  const ids = (list) => list.map((p) => p.id);
+
+  it('keeps drag-and-drop order for board order', () => {
+    const parts = [{ id: 1, sort: 3 }, { id: 2, sort: 1 }, { id: 3, sort: 2 }];
+    assert.deepEqual(ids(sortCards(parts, 'board')), [2, 3, 1]);
+  });
+
+  it('puts the fewest unchecked tasks first and parts with no checklist last', () => {
+    const parts = [
+      { id: 1, sort: 1, tasks: tasks(0, 4) },
+      { id: 2, sort: 2 },
+      { id: 3, sort: 3, tasks: tasks(2, 1) },
+      { id: 4, sort: 4, tasks: tasks(3, 0) },
+    ];
+    assert.deepEqual(ids(sortCards(parts, 'tasks')), [4, 3, 1, 2]);
+  });
+
+  it('sorts by the tasks left in the stage each part is in now, ignoring other stages', () => {
+    const columns = [{ id: 10 }, { id: 11 }];
+    const parts = [
+      { id: 1, sort: 1, column_id: 11, tasks: [{ column_id: 11, done: 0 }, { column_id: 11, done: 0 }] },
+      { id: 2, sort: 2, column_id: 11, tasks: [{ column_id: 10, done: 0 }, { column_id: 10, done: 0 }, { column_id: 10, done: 0 }, { column_id: 11, done: 0 }] },
+    ];
+    assert.deepEqual(ids(sortCards(parts, 'tasks', columns)), [2, 1]);
+  });
+
+  it('breaks a tie in tasks left by board order', () => {
+    const parts = [{ id: 1, sort: 2, tasks: tasks(0, 1) }, { id: 2, sort: 1, tasks: tasks(5, 1) }];
+    assert.deepEqual(ids(sortCards(parts, 'tasks')), [2, 1]);
+  });
+
+  it('puts the soonest due date first and undated parts last', () => {
+    const parts = [{ id: 1, sort: 1 }, { id: 2, sort: 2, due_date: '2026-12-10' }, { id: 3, sort: 3, due_date: '2026-12-01' }];
+    assert.deepEqual(ids(sortCards(parts, 'due')), [3, 2, 1]);
+  });
+
+  it('does not reorder the list it was given', () => {
+    const parts = [{ id: 1, sort: 2 }, { id: 2, sort: 1 }];
+    sortCards(parts, 'board');
+    assert.deepEqual(ids(parts), [1, 2]);
   });
 });
 

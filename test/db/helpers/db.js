@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 // Child tables first, so deleting never trips a foreign key.
-const TABLES = ['part_files', 'custom_parts', 'orders', 'inventory', 'sessions', 'users', 'vendors', 'settings', 'board_columns', 'mechanisms'];
+const TABLES = ['part_tasks', 'part_files', 'custom_parts', 'orders', 'inventory', 'sessions', 'users', 'vendors', 'settings', 'board_columns', 'mechanisms'];
 
 export async function openTestDb() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'parts-test-'));

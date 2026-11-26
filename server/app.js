@@ -9,7 +9,7 @@ import { mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import {
   HttpError, pick, buildOrderData, buildOrderPatch, computeCardSort, ordersToCsv, parsePartFileName,
   sniffImage, isPrivateAddress, isBuiltInSupplier, STATUSES, INVENTORY_FIELDS, CUSTOM_FIELDS, VENDOR_COLORS,
-  FILE_TYPES, MAX_FILE_MB, IMAGE_TYPES,
+  FILE_TYPES, MAX_FILE_MB, IMAGE_TYPES, buildTaskData, buildTaskPatch, canDeleteTask,
 } from './logic.js';
 
 const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -397,7 +397,26 @@ export function createApp({
     return store.updateCustomPart(row.id, {}, store.columnTimestamps(row.column_id));
   };
 
-  const withFiles = (part) => part && { ...part, files: store.listPartFilesFor(part.id) };
+  const withFiles = (part) => part && { ...part, files: store.listPartFilesFor(part.id), tasks: store.listTasksFor(part.id) };
+
+  // Throws a 400 when a task is assigned to someone who isn't on the team.
+  const checkAssignee = (id) => {
+    if (id != null && !store.getUser(id)) throw new HttpError(400, 'Unknown team member');
+  };
+
+  // Throws a 400 when a task is put in a stage that isn't on the board.
+  const checkStage = (id) => {
+    if (id != null && !store.listBoardColumns().some((c) => c.id === id)) throw new HttpError(400, 'Unknown stage');
+  };
+
+  // Add one checklist task to the end of a part's list. With no stage given it goes in the part's current stage.
+  const addTask = (user, part, body) => {
+    const data = buildTaskData(body);
+    checkAssignee(data.assigned_to);
+    checkStage(data.column_id);
+    return store.insertTask({ ...data, column_id: data.column_id ?? part.column_id ?? null,
+      custom_part_id: part.id, sort: store.nextTaskSort(part.id), created_by: user.id });
+  };
 
   // Files are uploaded before the part is saved, then attached by id. Only your own unattached uploads can be attached.
   const attachFiles = (user, partId, fileIds) => {
@@ -406,15 +425,29 @@ export function createApp({
   };
 
   app.get('/api/custom-parts', (req, res) => {
-    const files = store.listAttachedPartFiles();
-    const byPart = new Map();
-    for (const f of files) byPart.set(f.custom_part_id, [...(byPart.get(f.custom_part_id) || []), f]);
-    res.json(store.listCustomParts().map((p) => ({ ...p, files: byPart.get(p.id) || [] })));
+    const group = (rows) => {
+      const byPart = new Map();
+      for (const r of rows) byPart.set(r.custom_part_id, [...(byPart.get(r.custom_part_id) || []), r]);
+      return byPart;
+    };
+    const files = group(store.listAttachedPartFiles());
+    const tasks = group(store.listAllTasks());
+    res.json(store.listCustomParts().map((p) => ({ ...p, files: files.get(p.id) || [], tasks: tasks.get(p.id) || [] })));
   });
 
+  // A new part can bring its first checklist tasks along (body.tasks), created in the same transaction.
   app.post('/api/custom-parts', wrap((req, res) => {
-    const part = createCustom(req.user, req.body || {});
-    attachFiles(req.user, part.id, req.body?.file_ids);
+    const body = req.body || {};
+    const part = store.transaction(() => {
+      const created = createCustom(req.user, body);
+      for (const t of Array.isArray(body.tasks) ? body.tasks.slice(0, 50) : []) {
+        const task = addTask(req.user, created, t);
+        // A task ticked before the part was first saved arrives already done.
+        if (t.done) store.updateTask(task.id, { done: 1, done_by: req.user.id }, store.taskDoneTimestamps(true));
+      }
+      return created;
+    });
+    attachFiles(req.user, part.id, body.file_ids);
     res.json(withFiles(part));
   }));
 
@@ -456,6 +489,35 @@ export function createApp({
       return res.status(403).json({ error: 'Only mentors or the person who added it can delete this part.' });
     }
     store.deleteCustomPart(part.id).forEach((storedName) => removeStoredFile(storedName));
+    res.json({ ok: true });
+  }));
+
+  // -------------------------------------------------------------------------
+  // Checklist tasks on custom parts. Anyone signed in can add and check off tasks, like editing the part.
+
+  app.post('/api/custom-parts/:id/tasks', wrap((req, res) => {
+    const part = store.getCustomPart(req.params.id);
+    if (!part) return res.status(404).json({ error: 'Not found' });
+    res.json(addTask(req.user, part, req.body || {}));
+  }));
+
+  app.patch('/api/tasks/:id', wrap((req, res) => {
+    const task = store.getTask(req.params.id);
+    if (!task) return res.status(404).json({ error: 'Not found' });
+    const patch = buildTaskPatch(req.body || {});
+    if ('assigned_to' in patch) checkAssignee(patch.assigned_to);
+    if ('column_id' in patch) checkStage(patch.column_id);
+    if (patch.done && !task.done) patch.done_by = req.user.id;
+    res.json(store.updateTask(task.id, patch, 'done' in patch ? store.taskDoneTimestamps(patch.done) : ''));
+  }));
+
+  app.delete('/api/tasks/:id', wrap((req, res) => {
+    const task = store.getTask(req.params.id);
+    if (!task) return res.json({ ok: true });
+    if (!canDeleteTask(req.user, task, store.getCustomPart(task.custom_part_id))) {
+      return res.status(403).json({ error: 'Only mentors, the person who added the task, or the person who added the part can delete it.' });
+    }
+    store.deleteTask(task.id);
     res.json({ ok: true });
   }));
 

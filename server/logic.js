@@ -148,3 +148,56 @@ export function isBuiltInSupplier(name, builtIn) {
   const n = name.toLowerCase();
   return builtIn.some((s) => s.key === n || s.name.toLowerCase() === n);
 }
+
+// ---------------------------------------------------------------------------
+// Checklist tasks on custom parts
+
+export const TASK_TEXT_MAX = 200;
+
+// Task text: trimmed, required, and short enough to read on a card.
+function taskText(value) {
+  const text = String(value ?? '').trim();
+  if (!text) throw new HttpError(400, 'Task text is required');
+  if (text.length > TASK_TEXT_MAX) throw new HttpError(400, `Keep a task under ${TASK_TEXT_MAX} characters`);
+  return text;
+}
+
+// A team member id from a request, or null for "nobody". Anything else is a 400.
+function personId(value) {
+  if (value == null || value === '') return null;
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) throw new HttpError(400, 'Unknown team member');
+  return id;
+}
+
+// A board stage id from a request, or null for "not given". Anything else is a 400.
+function stageId(value) {
+  if (value == null || value === '') return null;
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) throw new HttpError(400, 'Unknown stage');
+  return id;
+}
+
+// A new task from a request body: { text, assigned_to, column_id }. column_id is the stage the task belongs to;
+// null means "the stage the part is in now", filled in by the route.
+export function buildTaskData(body = {}) {
+  return { text: taskText(body.text), assigned_to: personId(body.assigned_to), column_id: stageId(body.column_id) };
+}
+
+// Changes to a task: any of text, done, assigned_to, column_id. Keys not in the body are left out.
+export function buildTaskPatch(body = {}) {
+  const out = {};
+  if ('text' in body) out.text = taskText(body.text);
+  if ('done' in body) out.done = body.done ? 1 : 0;
+  if ('assigned_to' in body) out.assigned_to = personId(body.assigned_to);
+  if ('column_id' in body) {
+    out.column_id = stageId(body.column_id);
+    if (out.column_id == null) throw new HttpError(400, 'Unknown stage');
+  }
+  return out;
+}
+
+// Mentors, whoever added the task, and whoever added the part can delete a task.
+export function canDeleteTask(user, task, part) {
+  return isAtLeast(user, 'mentor') || task.created_by === user.id || part?.created_by === user.id;
+}

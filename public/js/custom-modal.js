@@ -1,9 +1,10 @@
 // Add/edit dialog for custom (made in-house) parts.
 import {
-  h, fill, api, toast, attempt, state, PRIORITIES, openModal, closeModal, refresh, field,
+  h, fill, api, toast, attempt, state, PRIORITIES, openModal, closeModal, refresh, render, field,
   isMentor, processList, photoPicker,
 } from './core.js';
 import { openViewer, isViewable, renderThumbnail } from './viewer.js';
+import { stageOf, taskCounts } from './board.js';
 
 const canDeleteCustom = (p) => isMentor() || p.created_by === state.user.id;
 const FILE_ACCEPT = '.step,.stp,.stl,.3mf,.obj,.dxf,.dwg,.gcode,.bgcode,.f3d,.sldprt,.pdf';
@@ -24,7 +25,6 @@ function filesSection(existing, onUploaded) {
       h('a', { class: 'file-name', href: `/api/files/${f.id}`, download: f.name, title: 'Download' }, f.name),
       h('span', { class: 'part-sub' }, fileSize(f.size)),
       isViewable(f.name) ? h('button', { type: 'button', class: 'btn small', onclick: () => openViewer(f, existing) }, 'View 3D') : null,
-      h('a', { class: 'btn small', href: `/api/files/${f.id}`, download: f.name }, 'Download'),
       isMentor() || f.uploaded_by === state.user.id ? h('button', { type: 'button', class: 'btn small danger', onclick: async () => {
         if (f.custom_part_id && !confirm(`Remove ${f.name}? This deletes it from the server.`)) return;
         const ok = await attempt(() => api('DELETE', `/api/files/${f.id}`));
@@ -71,11 +71,111 @@ function filesSection(existing, onUploaded) {
 
   fill(box,
     h('div', { class: 'files-head' },
-      h('span', { class: 'part-sub' }, 'STEP, STL, 3MF, DXF, G-code or PDF. Drop files here or attach them, so whoever makes it has the right file.'),
+      h('span', { class: 'part-sub' }, 'Drop STEP, STL, 3MF, DXF, G-code or PDF files here, so whoever makes it has the right file.'),
       h('button', { type: 'button', class: 'btn small', onclick: () => input.click() }, '+ Attach file')),
     list, status, input);
   draw();
-  return { el: h('label', { class: 'field full' }, h('span', {}, 'Files'), box), newIds };
+  return { el: h('section', { class: 'cp-section' }, h('h3', {}, 'Files'), box), newIds };
+}
+
+// Tasks section: the part's checklist. On a saved part every change is sent right away (and the board behind
+// the dialog updates); on a new part tasks are kept here and sent along when the part is created.
+// Each stage (Design, Manufacturing, ...) has its own checklist. The dialog opens on the stage the part is in.
+function tasksSection(existing, seed = {}) {
+  const tasks = existing ? [...(existing.tasks || [])] : [];
+  const cols = state.columns;
+  const partStage = stageOf(existing || seed, cols);
+  let shown = partStage;
+  const stageBar = h('div', { class: 'seg task-stages', role: 'tablist', 'aria-label': 'Stage' });
+  const list = h('div', { class: 'task-list' });
+  const summary = h('span', { class: 'part-sub' });
+  const canDelete = (t) => !existing || isMentor() || t.created_by === state.user.id || existing.created_by === state.user.id;
+  const assigneeSelect = (value, onchange) => h('select', { class: 'task-who', 'aria-label': 'Assigned to', onchange },
+    h('option', { value: '' }, 'Anyone'),
+    state.team.map((u) => h('option', { value: u.id, selected: value === u.id }, u.display_name)));
+
+  // Keep the part on the board in step with the checklist.
+  function changed() {
+    if (existing) {
+      existing.tasks = tasks.slice();
+      render();
+    }
+    draw();
+  }
+
+  async function update(t, patch) {
+    if (!existing) {
+      Object.assign(t, patch);
+      return changed();
+    }
+    const saved = await attempt(() => api('PATCH', `/api/tasks/${t.id}`, patch));
+    if (saved) Object.assign(t, saved);
+    changed();
+  }
+
+  function draw() {
+    const inStage = (id) => tasks.filter((t) => stageOf(t, cols) === id);
+    fill(stageBar, cols.map((c) => {
+      const n = taskCounts(inStage(c.id));
+      return h('button', { type: 'button', role: 'tab', class: c.id === shown ? 'active' : '', 'aria-selected': String(c.id === shown),
+        'aria-current': c.id === partStage ? 'step' : null, onclick: () => { shown = c.id; draw(); } },
+        c.id === partStage ? '● ' : '', c.name, n.total ? h('span', { class: 'task-stage-n' + (n.left ? '' : ' all-done') }, ` ${n.done}/${n.total}`) : null);
+    }));
+    const visible = inStage(shown);
+    const name = cols.find((c) => c.id === shown)?.name || 'this stage';
+    const done = visible.filter((t) => t.done).length;
+    summary.textContent = visible.length ? `${done} of ${visible.length} ${name} tasks done` : `No ${name} tasks yet.`;
+    newText.placeholder = `Add a ${name} task, e.g. Cut plate, Tap 10-32 holes`;
+    fill(list, visible.map((t) => {
+      const text = h('input', { type: 'text', class: 'task-text' + (t.done ? ' done' : ''), value: t.text, 'aria-label': 'Task',
+        onchange: (e) => (e.target.value.trim() ? update(t, { text: e.target.value }) : draw()) });
+      return h('div', { class: 'task-row' },
+        h('input', { type: 'checkbox', checked: !!t.done, 'aria-label': `Done: ${t.text}`, onchange: (e) => update(t, { done: e.target.checked }) }),
+        text,
+        assigneeSelect(t.assigned_to ?? null, (e) => update(t, { assigned_to: e.target.value ? Number(e.target.value) : null })),
+        canDelete(t) ? h('button', { type: 'button', class: 'btn small icon', 'aria-label': `Delete task: ${t.text}`, title: 'Delete task', onclick: async () => {
+          if (existing && !(await attempt(() => api('DELETE', `/api/tasks/${t.id}`)))) return;
+          tasks.splice(tasks.indexOf(t), 1);
+          changed();
+        } }, '✕') : null);
+    }));
+  }
+
+  const newText = h('input', { type: 'text', placeholder: 'Add a task, e.g. Cut plate, Tap 10-32 holes', 'aria-label': 'New task' });
+  const newWho = assigneeSelect(null);
+  async function add() {
+    const text = newText.value.trim();
+    if (!text) return newText.focus();
+    const assigned_to = newWho.value ? Number(newWho.value) : null;
+    const column_id = shown;
+    if (existing) {
+      const saved = await attempt(() => api('POST', `/api/custom-parts/${existing.id}/tasks`, { text, assigned_to, column_id }));
+      if (!saved) return;
+      tasks.push(saved);
+    } else {
+      tasks.push({ text, assigned_to, column_id, done: 0 });
+    }
+    newText.value = '';
+    newWho.value = '';
+    changed();
+    newText.focus();
+  }
+  newText.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      add();
+    }
+  });
+
+  draw();
+  return {
+    el: h('section', { class: 'cp-section' }, h('h3', {}, 'Checklist'),
+      h('div', { class: 'tasks-box' },
+        cols.length > 1 ? stageBar : null, summary, list,
+        h('div', { class: 'task-row task-add' }, newText, newWho, h('button', { type: 'button', class: 'btn small primary', onclick: add }, 'Add')))),
+    // Tasks typed into a part that hasn't been saved yet.
+    pending: () => (existing ? [] : tasks.map(({ text, assigned_to, column_id, done }) => ({ text, assigned_to, column_id, done: !!done }))),
+  };
 }
 
 export function openCustomPartModal(existing = null, seed = {}) {
@@ -103,6 +203,7 @@ export function openCustomPartModal(existing = null, seed = {}) {
   let image = src.image || null;
   const photo = photoPicker({ getUrl: () => image, setUrl: (url) => { image = url || null; }, label: 'Photo or drawing' });
   // When a 3D model is attached and the part has no photo yet, render one from the model.
+  const checklist = tasksSection(existing, seed);
   const attachments = filesSection(existing, async (file) => {
     if (image || !isViewable(file.name)) return;
     photo.querySelector('.part-sub').textContent = `Rendering a picture of ${file.name}…`;
@@ -120,24 +221,34 @@ export function openCustomPartModal(existing = null, seed = {}) {
     openCad.href = inputs.cad_url.value.trim();
   });
 
-  const body = h('div', { class: 'form' },
-    field('Part name', inputs.name, 'full'),
-    h('div', { class: 'full' }, photo),
-    field('Part number', inputs.part_number),
-    field('Mechanism', inputs.mechanism),
-    h('label', { class: 'field full' }, h('span', {}, 'CAD link'), h('div', { class: 'inline' }, inputs.cad_url, openCad)),
-    attachments.el,
-    field('Quantity needed', inputs.quantity),
-    field('Quantity made', inputs.quantity_done),
-    field('Material / stock', inputs.material),
-    field('Process', inputs.process),
-    field('Stage', inputs.column),
-    field('Priority', inputs.priority),
-    field('Assigned to (making it)', inputs.assigned_to),
-    field('Designer', inputs.designer),
-    field('Due date', inputs.due_date),
-    h('div', {}),
-    field('Notes', inputs.notes, 'full'),
+  // Layout: the work on the left (name, checklist, files, notes), the photo and the part's details in a sidebar on
+  // the right, grouped by what you'd look for (status, people, how it's built). Stacks on narrow screens.
+  inputs.name.classList.add('cp-name');
+  const group = (title, ...fields) => h('section', { class: 'cp-group' }, h('h3', {}, title), ...fields);
+  const body = h('div', { class: 'cp-layout' },
+    h('div', { class: 'cp-main' },
+      field('Part name', inputs.name, 'cp-name-field'),
+      h('div', { class: 'cp-ref' },
+        field('Part number', inputs.part_number),
+        h('label', { class: 'field' }, h('span', {}, 'CAD link'), h('div', { class: 'inline' }, inputs.cad_url, openCad))),
+      checklist.el,
+      attachments.el,
+      field('Notes', inputs.notes, 'cp-notes')),
+    h('aside', { class: 'cp-side' },
+      photo,
+      group('Status',
+        field('Stage', inputs.column),
+        field('Priority', inputs.priority),
+        field('Due date', inputs.due_date)),
+      group('People',
+        field('Making it', inputs.assigned_to),
+        field('Designer', inputs.designer)),
+      group('Build',
+        field('Mechanism', inputs.mechanism),
+        field('Process', inputs.process),
+        field('Material / stock', inputs.material),
+        field('Quantity needed', inputs.quantity),
+        field('Quantity made', inputs.quantity_done))),
     processes);
 
   async function save() {
@@ -164,6 +275,7 @@ export function openCustomPartModal(existing = null, seed = {}) {
       notes: inputs.notes.value.trim() || null,
       image,
       file_ids: attachments.newIds,
+      ...(existing ? {} : { tasks: checklist.pending() }),
     };
     const ok = await attempt(() => (existing ? api('PATCH', `/api/custom-parts/${existing.id}`, data) : api('POST', '/api/custom-parts', data)),
       existing ? 'Saved' : 'Custom part added');
@@ -182,6 +294,6 @@ export function openCustomPartModal(existing = null, seed = {}) {
     } }, 'Delete') : null,
     h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
     h('button', { class: 'btn primary', onclick: save }, existing ? 'Save' : 'Add part'),
-  ], 'narrow wide-form');
+  ], 'part-dialog');
   if (!existing) inputs.name.focus();
 }

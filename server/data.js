@@ -178,10 +178,11 @@ export function updateBoardColumn(id, fields) {
   return update('board_columns', id, fields);
 }
 
-// Remove a column; its cards move to fallbackId in the same transaction.
+// Remove a column; its cards and the tasks for that stage move to fallbackId in the same transaction.
 export function deleteBoardColumn(id, fallbackId) {
   return transaction(() => {
     db.prepare('UPDATE custom_parts SET column_id = ? WHERE column_id = ?').run(fallbackId, id);
+    db.prepare('UPDATE part_tasks SET column_id = ? WHERE column_id = ?').run(fallbackId, id);
     remove('board_columns', id);
   });
 }
@@ -364,10 +365,11 @@ export function updateCustomPart(id, fields, extraSql = '') {
   return update('custom_parts', id, fields, extraSql);
 }
 
-// Deletes a part and its file rows. Returns the stored file names so the caller can remove them from disk.
+// Deletes a part with its file rows and tasks. Returns the stored file names so the caller can remove them from disk.
 export function deleteCustomPart(id) {
   const stored = db.prepare('SELECT stored_name FROM part_files WHERE custom_part_id = ?').all(id);
   db.prepare('DELETE FROM part_files WHERE custom_part_id = ?').run(id);
+  db.prepare('DELETE FROM part_tasks WHERE custom_part_id = ?').run(id);
   remove('custom_parts', id);
   return stored.map((f) => f.stored_name);
 }
@@ -408,4 +410,43 @@ export function takeOrphanPartFiles() {
   const rows = db.prepare(`SELECT id, stored_name FROM part_files WHERE custom_part_id IS NULL AND created_at < datetime('now', '-1 day')`).all();
   for (const f of rows) remove('part_files', f.id);
   return rows.map((f) => f.stored_name);
+}
+
+// ---------------------------------------------------------------------------
+// Checklist tasks on custom parts
+
+export function listTasksFor(partId) {
+  return db.prepare('SELECT * FROM part_tasks WHERE custom_part_id = ? ORDER BY sort, id').all(Number(partId));
+}
+
+// Every task, grouped by part and in checklist order (the board loads them all at once).
+export function listAllTasks() {
+  return db.prepare('SELECT * FROM part_tasks ORDER BY custom_part_id, sort, id').all();
+}
+
+export function getTask(id) {
+  return db.prepare('SELECT * FROM part_tasks WHERE id = ?').get(Number(id));
+}
+
+// Next position at the end of a part's checklist.
+export function nextTaskSort(partId) {
+  return db.prepare('SELECT COALESCE(MAX(sort), 0) + 1 AS s FROM part_tasks WHERE custom_part_id = ?').get(Number(partId)).s;
+}
+
+export function insertTask(fields) {
+  return insert('part_tasks', fields);
+}
+
+// extraSql comes from taskDoneTimestamps().
+export function updateTask(id, fields, extraSql = '') {
+  return update('part_tasks', Number(id), fields, extraSql);
+}
+
+// SET clause for checking a task off (stamp the time once) or un-checking it (clear who and when).
+export function taskDoneTimestamps(done) {
+  return done ? `done_at = COALESCE(done_at, ${NOW})` : 'done_at = NULL, done_by = NULL';
+}
+
+export function deleteTask(id) {
+  remove('part_tasks', Number(id));
 }

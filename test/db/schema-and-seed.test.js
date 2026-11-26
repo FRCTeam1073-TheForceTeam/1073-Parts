@@ -25,7 +25,7 @@ function openDbInChild(dir) {
 
 test('a fresh database has every table', () => {
   const names = t.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name);
-  for (const table of ['mechanisms', 'orders', 'inventory', 'users', 'sessions', 'settings', 'board_columns', 'custom_parts', 'vendors', 'part_files']) {
+  for (const table of ['mechanisms', 'orders', 'inventory', 'users', 'sessions', 'settings', 'board_columns', 'custom_parts', 'vendors', 'part_files', 'part_tasks']) {
     assert.ok(names.includes(table), `missing table ${table}`);
   }
 });

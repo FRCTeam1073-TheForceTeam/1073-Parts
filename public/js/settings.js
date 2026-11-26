@@ -1,7 +1,7 @@
 // Settings tab: your account, team members, approval rules, mechanisms, suppliers.
 import {
   h, api, money, toCents, fromCents, attempt, state, ROLE_LABEL, refresh, can, isMentor,
-  openModal, closeModal, field, toast, prefs, setTheme, seg, render,
+  openModal, closeModal, field, toast, prefs, setTheme, setSize, seg, render,
 } from './core.js';
 
 function accountCard() {
@@ -245,6 +245,11 @@ function appearanceCard() {
     h('p', { class: 'note' }, 'Saved on this browser only. Auto follows your computer\'s light/dark setting.'),
     seg([['auto', '◐ Auto'], ['light', '☀ Light'], ['dark', '☾ Dark']], prefs.get('theme', 'auto'), (t) => {
       setTheme(t);
+      render();
+    }),
+    h('p', { class: 'note', style: { marginTop: '12px' } }, 'Size: Auto makes things a little bigger on large screens.'),
+    seg([['auto', 'Auto'], ['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']], prefs.get('size', 'auto'), (s) => {
+      setSize(s);
       render();
     }));
 }

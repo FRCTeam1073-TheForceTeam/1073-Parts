@@ -12,6 +12,50 @@ import { openPlacedOrderModal, openReceiveModal } from './orders.js';
 export const today = () => new Date().toISOString().slice(0, 10);
 export const isOverdue = (p, lastColumnId) => p.due_date && p.due_date < today() && p.column_id !== lastColumnId;
 
+// Checklist progress for a list of tasks, or for a part's tasks.
+export function taskCounts(partOrTasks) {
+  const tasks = Array.isArray(partOrTasks) ? partOrTasks : partOrTasks.tasks || [];
+  const done = tasks.filter((t) => t.done).length;
+  return { total: tasks.length, done, left: tasks.length - done };
+}
+
+// The stage a part or task is in. No stage means the first column (where unplaced parts are shown).
+export const stageOf = (item, columns) => item.column_id ?? columns[0]?.id ?? null;
+
+// The part's tasks for one stage (default: the stage the part is in now), in checklist order.
+export function stageTasks(part, columns, stage = stageOf(part, columns)) {
+  return (part.tasks || []).filter((t) => stageOf(t, columns) === stage);
+}
+
+// Where the part is on the board: { step, total, name } with step counting from 1.
+export function stageProgress(part, columns) {
+  const idx = Math.max(0, columns.findIndex((c) => c.id === stageOf(part, columns)));
+  return { step: columns.length ? idx + 1 : 0, total: columns.length, name: columns[idx]?.name || '' };
+}
+
+export const BOARD_SORTS = [['board', 'Board order'], ['tasks', 'Fewest tasks left'], ['due', 'Due date']];
+
+// Order of cards within a column. 'board' is the drag-and-drop order. 'tasks' puts the fewest unchecked
+// tasks first, with parts that have no checklist last. 'due' puts the soonest due date first, undated last.
+// Ties keep board order.
+// The 'tasks' count is for the stage each part is in now.
+export function sortCards(parts, mode, columns = []) {
+  const byBoard = (a, b) => a.sort - b.sort || a.id - b.id;
+  const rank = {
+    tasks: (p) => {
+      const c = taskCounts(stageTasks(p, columns));
+      return c.total ? c.left : Infinity;
+    },
+    due: (p) => (p.due_date ? Date.parse(p.due_date) : Infinity),
+  }[mode];
+  if (!rank) return parts.slice().sort(byBoard);
+  return parts.slice().sort((a, b) => {
+    const ra = rank(a);
+    const rb = rank(b);
+    return ra === rb ? byBoard(a, b) : ra - rb;
+  });
+}
+
 function setUi(key, value, persist = false) {
   state.ui[key] = value;
   if (persist) prefs.set(key, value);
@@ -53,6 +97,8 @@ export function renderBoard() {
       h('option', { value: '' }, 'All processes'),
       [...new Set([...processList(), ...state.customParts.map((p) => p.process).filter(Boolean)])]
         .map((p) => h('option', { value: p, selected: ui.boardProcess === p }, p))) : null,
+    custom ? h('select', { 'aria-label': 'Sort cards', onchange: (e) => setUi('boardSort', e.target.value, true) },
+      BOARD_SORTS.map(([v, l]) => h('option', { value: v, selected: ui.boardSort === v }, `Sort: ${l}`))) : null,
     h('div', { class: 'grow' }),
     custom ? h('button', { class: 'btn primary', onclick: () => openCustomPartModal(null, { mechanism_id: ui.boardMech && ui.boardMech !== 'none' ? Number(ui.boardMech) : null }) }, '+ Custom part')
       : h('button', { class: 'btn primary', onclick: () => openItemModal('order') }, '+ Add part'),
@@ -155,7 +201,9 @@ function customCard(p, colIndex) {
   const last = state.columns.at(-1)?.id;
   const next = state.columns[colIndex + 1];
   const who = personName(p.assigned_to);
-  const pct = Math.min(100, Math.round(((p.quantity_done || 0) / Math.max(1, p.quantity)) * 100));
+  const stage = stageProgress(p, state.columns);
+  const tasks = taskCounts(stageTasks(p, state.columns));
+  const pctOf = (n, of) => (of ? Math.min(100, Math.round((n / of) * 100)) : 0);
   return makeCard(p.id, 'custom', true, () => openCustomPartModal(p), [
     p.image ? h('img', { class: 'kcard-img', src: p.image, alt: '', loading: 'lazy', draggable: 'false' }) : null,
     h('div', { class: 'kcard-top' },
@@ -163,30 +211,41 @@ function customCard(p, colIndex) {
       h('span', { class: 'kcard-title' }, p.name),
       p.priority && p.priority !== 'normal' ? h('span', { class: `pill prio-${p.priority}` }, p.priority) : null),
     p.part_number || p.material ? h('div', { class: 'part-sub' }, [p.part_number, p.material].filter(Boolean).join(' · ')) : null,
-    h('div', { class: 'kprogress', title: `${p.quantity_done || 0} of ${p.quantity} made` },
-      h('div', { class: 'kbar' }, h('div', { style: { width: pct + '%' } })),
-      h('span', {}, `${p.quantity_done || 0}/${p.quantity}`)),
+    // Two bars: how far along the board the part is, and how much of this stage's checklist is done.
+    h('div', { class: 'kprogress', title: `Stage ${stage.step} of ${stage.total}: ${stage.name}` },
+      h('span', { class: 'klabel' }, 'Stage'),
+      h('div', { class: 'kbar stage' }, h('div', { style: { width: pctOf(stage.step, stage.total) + '%', background: state.columns[stage.step - 1]?.color } })),
+      h('span', { class: 'kcount-n' }, `${stage.step}/${stage.total}`)),
+    h('div', { class: 'kprogress' + (tasks.total && !tasks.left ? ' all-done' : ''),
+      title: tasks.total ? `${tasks.done} of ${tasks.total} ${stage.name} tasks done` : `No tasks for ${stage.name} yet` },
+      h('span', { class: 'klabel' }, 'Tasks'),
+      h('div', { class: 'kbar' }, h('div', { style: { width: pctOf(tasks.done, tasks.total) + '%' } })),
+      h('span', { class: 'kcount-n' }, tasks.total ? `${tasks.done}/${tasks.total}` : '—')),
     h('div', { class: 'kcard-foot' },
+      p.quantity > 1 || p.quantity_done > p.quantity ? h('span', { class: 'kmade', title: `${p.quantity_done || 0} of ${p.quantity} made` }, `Made ${p.quantity_done || 0}/${p.quantity}`) : null,
       p.process ? h('span', { class: 'pill' }, p.process) : null,
       p.due_date ? h('span', { class: 'kdue' + (isOverdue(p, last) ? ' overdue' : '') }, `Due ${new Date(p.due_date + 'T12:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`) : null,
-      h('span', { class: 'grow' }),
-      p.cad_url ? h('a', { class: 'kcad', href: p.cad_url, target: '_blank', rel: 'noopener', title: 'Open CAD', onclick: (e) => e.stopPropagation() }, 'CAD') : null,
-      p.files?.some((f) => isViewable(f.name))
-        ? h('button', { class: 'kfile', title: 'View in 3D', onclick: (e) => { e.stopPropagation(); openViewer(p.files.find((f) => isViewable(f.name)), p); } }, '3D')
-        : null,
-      p.files?.length ? h('span', { class: 'kfile', title: p.files.map((f) => f.name).join('\n') }, `📎 ${p.files.length}`) : null,
-      who ? h('span', { class: 'avatar', title: `Assigned to ${who}` }, initials(who)) : null,
-      next ? h('button', { class: 'knext', title: `Move to ${next.name}`, 'aria-label': `Move to ${next.name}`,
-        onclick: (e) => { e.stopPropagation(); moveCustom(p.id, next.id, null); } }, '›') : null),
+      // Buttons stay together on the right, even when the footer wraps onto a second line.
+      h('span', { class: 'kcard-actions' },
+        p.cad_url ? h('a', { class: 'kcad', href: p.cad_url, target: '_blank', rel: 'noopener', title: 'Open CAD', onclick: (e) => e.stopPropagation() }, 'CAD') : null,
+        p.files?.some((f) => isViewable(f.name))
+          ? h('button', { class: 'kfile', title: 'View in 3D', onclick: (e) => { e.stopPropagation(); openViewer(p.files.find((f) => isViewable(f.name)), p); } }, '3D')
+          : null,
+        p.files?.length ? h('span', { class: 'kfile', title: p.files.map((f) => f.name).join('\n') }, `📎 ${p.files.length}`) : null,
+        who ? h('span', { class: 'avatar', title: `Assigned to ${who}` }, initials(who)) : null,
+        next ? h('button', { class: 'knext', title: `Move to ${next.name}`, 'aria-label': `Move to ${next.name}`,
+          onclick: (e) => { e.stopPropagation(); moveCustom(p.id, next.id, null); } }, '›') : null)),
   ]);
 }
 
 function customBoard(parts) {
   return h('div', { class: 'kboard' }, state.columns.map((c, i) => {
-    const cards = parts.filter((p) => p.column_id === c.id || (!p.column_id && i === 0)).map((p) => customCard(p, i));
+    const inColumn = parts.filter((p) => p.column_id === c.id || (!p.column_id && i === 0));
+    const cards = sortCards(inColumn, state.ui.boardSort, state.columns).map((p) => customCard(p, i));
     return makeColumn({
       id: c.id, name: c.name, color: c.color, cards,
-      onDrop: (id, before) => moveCustom(id, c.id, before),
+      // When sorted by tasks or due date the column order isn't the drag order, so a drop just moves the card there.
+      onDrop: (id, before) => moveCustom(id, c.id, state.ui.boardSort === 'board' ? before : null),
       footer: i === 0 ? h('button', { class: 'kadd', onclick: () => openCustomPartModal(null, { column_id: c.id }) }, '+ Add') : null,
     });
   }));
@@ -194,19 +253,20 @@ function customBoard(parts) {
 
 function customList(parts) {
   return state.columns.map((c, i) => {
-    const rows = parts.filter((p) => p.column_id === c.id || (!p.column_id && i === 0));
+    const rows = sortCards(parts.filter((p) => p.column_id === c.id || (!p.column_id && i === 0)), state.ui.boardSort, state.columns);
     if (!rows.length) return null;
     return h('section', { class: 'group' },
       h('div', { class: 'group-head' }, h('h3', {}, h('span', { class: 'dot', style: { background: c.color } }), c.name), h('span', { class: 'meta' }, plural(rows.length, 'part'))),
       h('table', { class: 'plain board-list' },
         h('thead', {}, h('tr', {}, h('th', {}, 'Part'), h('th', {}, 'Mechanism'), h('th', {}, 'Process'), h('th', {}, 'Material'),
-          h('th', { class: 'num' }, 'Made'), h('th', {}, 'Assigned'), h('th', {}, 'Due'), h('th', {}, 'Stage'))),
+          h('th', { class: 'num' }, 'Made'), h('th', { class: 'num' }, 'Tasks'), h('th', {}, 'Assigned'), h('th', {}, 'Due'), h('th', {}, 'Stage'))),
         h('tbody', {}, rows.map((p) => h('tr', {},
           h('td', {}, h('button', { class: 'linkish part-name', onclick: () => openCustomPartModal(p) }, p.name), p.part_number ? h('div', { class: 'part-sub' }, p.part_number) : null),
           h('td', {}, mechById(p.mechanism_id)?.name || '—'),
           h('td', {}, p.process || '—'),
           h('td', {}, p.material || '—', p.files?.length ? h('span', { class: 'part-sub', title: p.files.map((f) => f.name).join('\n') }, ` · 📎 ${p.files.length}`) : null),
           h('td', { class: 'num' }, `${p.quantity_done || 0}/${p.quantity}`),
+          h('td', { class: 'num', title: `Tasks for ${c.name}` }, ((t) => (t.total ? `${t.done}/${t.total}` : '—'))(taskCounts(stageTasks(p, state.columns)))),
           h('td', {}, personName(p.assigned_to) || '—'),
           h('td', { class: isOverdue(p, state.columns.at(-1)?.id) ? 'overdue' : '' }, p.due_date || '—'),
           h('td', {}, h('select', { 'aria-label': 'Stage', onchange: (e) => moveCustom(p.id, Number(e.target.value), null) },

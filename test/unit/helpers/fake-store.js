@@ -1,6 +1,6 @@
 // In-memory stand-in for server/data.js, covering the calls the route tests make.
 // Every write is recorded in `calls` so tests can assert on what the route asked the store to do.
-export function makeFakeStore({ settings = {}, users = [], orders = [], mechanisms = [], inventory = [], columns = [], customParts = [] } = {}) {
+export function makeFakeStore({ settings = {}, users = [], orders = [], mechanisms = [], inventory = [], columns = [], customParts = [], tasks = [] } = {}) {
   const s = {
     settings: { require_approval: '0', approval_threshold_cents: '0', processes: '', ...settings },
     users: users.map((u) => ({ disabled: 0, ...u })),
@@ -10,6 +10,7 @@ export function makeFakeStore({ settings = {}, users = [], orders = [], mechanis
     columns: columns.map((c) => ({ ...c })),
     customParts: customParts.map((p) => ({ ...p })),
     partFiles: [],
+    tasks: tasks.map((t) => ({ done: 0, ...t })),
     calls: [],
     lastId: 500,
   };
@@ -133,6 +134,31 @@ export function makeFakeStore({ settings = {}, users = [], orders = [], mechanis
     getPartFile: (id) => byId(s.partFiles, id),
     deletePartFile: (id) => {
       s.partFiles = s.partFiles.filter((f) => f.id !== Number(id));
+    },
+
+    listTasksFor: (partId) => s.tasks.filter((t) => t.custom_part_id === Number(partId)).sort((a, b) => a.sort - b.sort),
+    listAllTasks: () => s.tasks.slice().sort((a, b) => a.custom_part_id - b.custom_part_id || a.sort - b.sort),
+    getTask: (id) => byId(s.tasks, id),
+    nextTaskSort: (partId) => {
+      const sorts = s.tasks.filter((t) => t.custom_part_id === Number(partId)).map((t) => t.sort);
+      return sorts.length ? Math.max(...sorts) + 1 : 1;
+    },
+    insertTask: (data) => {
+      const row = { id: nextId(), done: 0, ...data };
+      s.tasks.push(row);
+      record('insertTask', data);
+      return row;
+    },
+    updateTask: (id, data, extra = '') => {
+      const t = byId(s.tasks, id);
+      Object.assign(t, data);
+      record('updateTask', id, data, extra);
+      return t;
+    },
+    taskDoneTimestamps: (done) => (done ? 'done_at = NOW' : 'done_at = NULL, done_by = NULL'),
+    deleteTask: (id) => {
+      s.tasks = s.tasks.filter((t) => t.id !== Number(id));
+      record('deleteTask', id);
     },
 
     listVendors: () => [],

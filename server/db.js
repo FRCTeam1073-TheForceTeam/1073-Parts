@@ -206,3 +206,27 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_part_files_part ON part_files(custom_part_id);
 `);
+
+// Checklist tasks on custom parts ("Cut plate", "Tap holes"), checked off as the part gets made.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS part_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    custom_part_id INTEGER NOT NULL REFERENCES custom_parts(id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    done INTEGER NOT NULL DEFAULT 0,
+    assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    sort REAL NOT NULL DEFAULT 0,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    done_at TEXT,
+    done_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_part_tasks_part ON part_tasks(custom_part_id);
+`);
+
+// Each task belongs to a board stage (Design, Manufacturing, ...). Tasks made before stages existed are put in
+// the stage their part was in at the time, once, when the column is first added.
+if (!db.prepare('PRAGMA table_info(part_tasks)').all().some((c) => c.name === 'column_id')) {
+  addColumn('part_tasks', 'column_id', 'INTEGER REFERENCES board_columns(id) ON DELETE SET NULL');
+  db.exec('UPDATE part_tasks SET column_id = (SELECT column_id FROM custom_parts WHERE custom_parts.id = part_tasks.custom_part_id)');
+}
